@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block title %}Админ-панель{% endblock %}
+{% block topbar_left %}Админ-панель{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Версии прайса</h2>
+  <table class="table">
+    <thead><tr><th>id</th><th>Версия</th><th>Загружена</th><th>Комментарий</th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr><td>{{ v.id }}</td><td>{{ v.version }}</td><td>{{ v.loaded_at }}</td><td>{{ v.comment }}</td></tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">Версий пока нет — нажмите «Загрузить данные».</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>История изменений цен</h2>
+  <table class="table">
+    <thead><tr><th>Дата</th><th>Сотрудник</th><th>Раздел</th><th>Позиция</th>
+               <th>Поле</th><th>Было</th><th>Стало</th></tr></thead>
+    <tbody>
+      {% for c in changes %}
+      <tr><td>{{ c.changed_at }}</td><td>{{ c.user_login }}</td><td>{{ c.entity }}</td>
+          <td>{{ c.entity_id }}</td><td>{{ c.field }}</td>
+          <td><small>{{ c.old_value }}</small></td><td><small>{{ c.new_value }}</small></td></tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">Изменений цен ещё не было.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Сотрудники</h2>
+  <p><a class="btn btn-ghost" href="{{ url_for('admin_users') }}">Управление сотрудниками</a></p>
+</section>
+{% endblock %}

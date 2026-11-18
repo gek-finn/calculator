@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+{% block title %}Новый расчёт — Калькулятор «ЛидерПро»{% endblock %}
+{% block topbar_left %}Новый расчёт{% endblock %}
+{% block content %}
+
+{# ---------- Шаг 1: Загрузить данные ---------- #}
+<section class="card step-card" id="step1">
+  <div class="step-head">
+    <span class="step-num">1</span>
+    <h2>Загрузить данные</h2>
+    <span class="badge {{ 'badge-ok' if price_loaded else 'badge-warn' }}">
+      {{ 'Прайс загружен' if price_loaded else 'Прайс не загружен' }}
+    </span>
+  </div>
+  <p class="muted">Чтение файла <code>данные_калькулятора.xlsx</code>, проверка листов,
+  колонок, типов данных и дубликатов. Расчёт разрешён только после успешной загрузки.</p>
+  <form method="post" action="{{ url_for('price_load') }}">
+    <button class="btn btn-primary" type="submit">Загрузить данные</button>
+  </form>
+  {% if price %}
+  <p class="loaded-info">Версия прайса: <strong>{{ price.version }}</strong>,
+     дата загрузки: <strong>{{ price.loaded_at }}</strong>.
+     Позиций: конструкций {{ price.constructions|length }},
+     профилей {{ price.profiles|length }}, стекла {{ price.glasses|length }},
+     фурнитуры {{ price.hardware|length }}, услуг {{ price.services|length }}.</p>
+  {% endif %}
+  {% set errors = session.pop('price_load_errors', []) %}
+  {% if errors %}
+  <div class="flash flash-error">
+    <strong>Ошибки прайса (загрузка остановлена):</strong>
+    <ul>
+      {% for e in errors[:20] %}
+      <li>Лист «{{ e.sheet }}», строка {{ e.row or '—' }}: {{ e.message }}</li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  {% set warnings = session.pop('price_load_warnings', []) %}
+  {% if warnings %}
+  <details class="warnings">
+    <summary>Предупреждения ({{ warnings|length }}) — не блокируют загрузку, но требуют внимания</summary>
+    <ul>
+      {% for w in warnings[:30] %}
+      <li>Лист «{{ w.sheet }}», строка {{ w.row or '—' }}: {{ w.message }}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+
+{# ---------- Обновление прайса с Яндекс Диска (только по кнопке) ---------- #}
+<section class="card">
+  <h2>Обновить прайс с Яндекс Диска</h2>
+  <p class="muted">Получение актуального Excel-прайса по публичной ссылке
+    <code>https://disk.yandex.ru/d/YOUR_PUBLIC_PRICE_LINK</code>. Обновление выполняется
+    <strong>только по нажатию кнопки</strong>; действующий прайс не меняется до
+    вашего подтверждения.</p>
+  <form method="post" action="{{ url_for('yandex_price_download') }}" id="yandex-form">
+    <button class="btn btn-primary" type="submit" id="yandex-btn">
+      Получить актуальный прайс с Яндекс Диска
+    </button>
+  </form>
+  <p id="yandex-status" class="muted" role="status" aria-live="polite"></p>
+</section>
+
+{# ---------- Шаг 2: Начать расчёт ---------- #}
+<section class="card step-card" id="step2">
+  <div class="step-head">
+    <span class="step-num">2</span>
+    <h2>Начать расчёт</h2>
+  </div>
+  {% if not price_loaded %}
+    <p class="muted">Доступно после успешной загрузки прайса.</p>
+  {% else %}
+  <div id="calc-workspace" hidden>
+    <h3>Клиент</h3>
+    <div class="grid2">
+      <label>ФИО / название компании *
+        <input type="text" id="client-name" placeholder="Иванов Иван Иванович">
+      </label>
+      <label>Телефон
+        <input type="tel" id="client-phone" placeholder="+7 (999) 000-00-00">
+      </label>
+      <label>Email
+        <input type="email" id="client-email">
+      </label>
+      <label>Адрес объекта
+        <input type="text" id="client-address">
+      </label>
+      <label>Источник заявки
+        <input type="text" id="client-source" placeholder="звонок, сайт, рекомендация…">
+      </label>
+      <label>Комментарий
+        <input type="text" id="client-comment">
+      </label>
+    </div>
+
+    <h3>Конструкции</h3>
+    <table class="table" id="structures-table">
+      <thead>
+        <tr>
+          <th>№</th><th>Наименование</th><th>Размеры, мм</th><th>Кол-во</th>
+          <th>Площадь, м²</th><th>Стоимость</th><th>Действия</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <button class="btn btn-ghost" type="button" id="btn-add-structure">+ Добавить конструкцию</button>
+
+    <div id="structure-form-wrap" class="structure-form" hidden>
+      <h3 id="structure-form-title">Новая конструкция</h3>
+      <div class="grid2">
+        <label>Тип конструкции
+          <select id="f-construction"></select>
+        </label>
+        <label>Профиль
+          <select id="f-profile"></select>
+        </label>
+        <label>Стекло
+          <select id="f-glass"></select>
+        </label>
+        <label>Ширина, мм
+          <input type="number" id="f-width" min="1" value="4000">
+        </label>
+        <label>Высота, мм
+          <input type="number" id="f-height" min="1" value="2500">
+        </label>
+        <label>Количество
+          <input type="number" id="f-quantity" min="1" value="1">
+        </label>
+      </div>
+      <h4>Фурнитура</h4>
+      <div id="f-hardware" class="chips"></div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="button" id="btn-save-structure">Добавить в расчёт</button>
+        <button class="btn btn-ghost" type="button" id="btn-cancel-structure">Отмена</button>
+        <span class="muted" id="f-preview"></span>
+      </div>
+    </div>
+
+    <h3>Дополнительные услуги</h3>
+    <div id="services-list" class="checkbox-list"></div>
+
+    <h3>Скидка</h3>
+    <div class="grid2">
+      <label>Тип скидки
+        <select id="discount-type">
+          <option value="">Без скидки</option>
+          <option value="процент">Процент</option>
+          <option value="фикс">Фиксированная сумма, ₽</option>
+        </select>
+      </label>
+      <label>Значение
+        <input type="number" id="discount-value" min="0" step="0.01" disabled>
+      </label>
+    </div>
+    <p class="muted" id="discount-hint"></p>
+
+    <div class="form-actions sticky-actions">
+      <button class="btn btn-primary" type="button" id="btn-show-total">Показать итог</button>
+    </div>
+  </div>
+  <button class="btn btn-primary" type="button" id="btn-start-calc"
+          {% if price_loaded %}hidden{% endif %}>Начать расчёт</button>
+  {% endif %}
+</section>
+
+{# ---------- Шаг 3: Показать итог ---------- #}
+<section class="card step-card" id="step3" {% if not price_loaded %}hidden{% endif %}>
+  <div class="step-head">
+    <span class="step-num">3</span>
+    <h2>Показать итог</h2>
+  </div>
+  <div id="total-block" class="total-layout" hidden>
+    <div class="total-details" id="total-details"></div>
+    <aside class="total-summary">
+      <h3>Итог</h3>
+      <div class="sum-row"><span>До скидки</span><strong id="sum-subtotal">—</strong></div>
+      <div class="sum-row"><span>Скидка</span><strong id="sum-discount">—</strong></div>
+      <div class="sum-row total"><span>Итого к оплате</span><strong id="sum-total">—</strong></div>
+      <button class="btn btn-primary" type="button" id="btn-save-quote">Сохранить в историю</button>
+      <button class="btn btn-ghost" type="button" id="btn-back-edit">Вернуться к редактированию</button>
+      <div id="save-result"></div>
+    </aside>
+  </div>
+  <p class="muted" id="total-empty">Итог появится после нажатия «Показать итог».</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Обновление прайса с Яндекс Диска: понятные статусы и защита от повтора.
+  (function () {
+    var form = document.getElementById('yandex-form');
+    if (!form) return;
+    var btn = document.getElementById('yandex-btn');
+    var status = document.getElementById('yandex-status');
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (btn.disabled) return;             // не запускаем две операции подряд
+      btn.disabled = true;
+      status.textContent = 'Получение файла с Яндекс Диска…';
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'fetch' }
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        if (data && data.ok && data.redirect) {
+          status.textContent = 'Файл получен, выполняется проверка…';
+          window.location.href = data.redirect;
+        } else {
+          status.textContent = (data && data.message)
+            ? data.message : 'Не удалось получить файл с Яндекс Диска.';
+          btn.disabled = false;
+        }
+      }).catch(function () {
+        status.textContent = 'Не удалось получить файл с Яндекс Диска (ошибка сети).';
+        btn.disabled = false;
+      });
+    });
+  })();
+</script>
+{% if price_loaded %}
+<script>
+  window.PRICE = {{ price | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/calc.js') }}"></script>
+{% endif %}
+{% endblock %}

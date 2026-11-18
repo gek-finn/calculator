@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block title %}Мои расчёты{% endblock %}
+{% block topbar_left %}Мои расчёты{% endblock %}
+{% block content %}
+<section class="card">
+  <form method="get" class="search-form">
+    <input type="text" name="q" value="{{ search }}" placeholder="Поиск по номеру, клиенту или дате…">
+    <button class="btn btn-primary" type="submit">Найти</button>
+  </form>
+  <table class="table">
+    <thead>
+      <tr><th>Номер</th><th>Дата</th><th>Сотрудник</th><th>Клиент</th>
+          <th>Версия</th><th>Скидка</th><th>Итог</th><th>Действия</th></tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td><strong>{{ item.number }}</strong></td>
+        <td>{{ item.created_at }}</td>
+        <td>{{ item.user_login }}</td>
+        <td>{{ item.client_name }}{% if item.client_phone %}<br><small>{{ item.client_phone }}</small>{% endif %}</td>
+        <td>{{ item.version_no or 1 }}</td>
+        <td>{{ item.discount }}</td>
+        <td><strong>{{ item.total }} ₽</strong></td>
+        <td>
+          <a class="btn btn-primary btn-small" href="{{ url_for('recalc_calc', calc_id=item.id) }}">Пересчитать по актуальному прайсу</a>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('calculation_view', calc_id=item.id) }}">Открыть</a>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('export_calc', calc_id=item.id, fmt='pdf') }}">Экспорт PDF</a>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('export_calc', calc_id=item.id, fmt='xlsx') }}">Экспорт XLSX</a>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('calc_versions', calc_id=item.id) }}">История версий</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">Сохранённых расчётов пока нет.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

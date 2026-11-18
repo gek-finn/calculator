@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}История версий расчёта{% endblock %}
+{% block topbar_left %}История версий расчёта{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>История версий расчёта</h2>
+  <p class="muted">Все версии одной цепочки расчётов. Исходный расчёт не изменяется при создании пересчётов.</p>
+  <table class="table">
+    <thead><tr><th>№ версии</th><th>Дата</th><th>Пользователь</th>
+               <th>Версия прайса</th><th>Было</th><th>Стало</th><th>Разница</th><th>Действия</th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr>
+        <td>{{ v.version_no or 1 }}</td>
+        <td>{{ v.recalculated_at or v.created_at }}</td>
+        <td>{{ v.recalc_user or v.user_login }}</td>
+        <td>{{ v.price_version }}</td>
+        <td>{{ v.old_total or '—' }}</td>
+        <td>{{ v.new_total or v.total }}</td>
+        <td>{{ v.difference or '—' }}</td>
+        <td>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('calculation_view', calc_id=v.id) }}">Открыть</a>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('export_calc', calc_id=v.id, fmt='pdf') }}">PDF</a>
+          <a class="btn btn-ghost btn-small" href="{{ url_for('export_calc', calc_id=v.id, fmt='xlsx') }}">XLSX</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="muted">Версии не найдены.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Расчёт {{ calc.number }}{% endblock %}
+{% block topbar_left %}Расчёт {{ calc.number }}{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>{{ calc.number }} от {{ calc.created_at }}</h2>
+  {% if warnings %}
+  <div class="flash flash-info">
+    <strong>Внимание:</strong>
+    <ul>
+      {% for w in warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <p class="muted">Сотрудник: {{ calc.user_login }}. Версия прайса на момент расчёта:
+     <strong>{{ calc.price_version }}</strong>. Это историческая запись — цены зафиксированы
+     и не пересчитываются при изменении прайса.</p>
+  <div class="form-actions" style="margin:8px 0">
+    <a class="btn btn-primary" href="{{ url_for('recalc_calc', calc_id=calc.id) }}">Пересчитать по актуальному прайсу</a>
+    <a class="btn btn-ghost" href="{{ url_for('export_calc', calc_id=calc.id, fmt='pdf') }}">Экспорт в PDF</a>
+    <a class="btn btn-ghost" href="{{ url_for('export_calc', calc_id=calc.id, fmt='xlsx') }}">Экспорт в Excel</a>
+    <a class="btn btn-ghost" href="{{ url_for('calc_versions', calc_id=calc.id) }}">История версий</a>
+  </div>
+
+  <h3>Клиент</h3>
+  <div class="grid2">
+    <p><span class="muted">ФИО / компания:</span> {{ calc.client_name or '—' }}</p>
+    <p><span class="muted">Телефон:</span> {{ calc.client_phone or '—' }}</p>
+    <p><span class="muted">Email:</span> {{ calc.client_email or '—' }}</p>
+    <p><span class="muted">Адрес объекта:</span> {{ calc.client_address or '—' }}</p>
+    <p><span class="muted">Источник:</span> {{ calc.client_source or '—' }}</p>
+    <p><span class="muted">Комментарий:</span> {{ calc.comment or '—' }}</p>
+  </div>
+
+  <h3>Конструкции</h3>
+  <table class="table">
+    <thead><tr><th>№</th><th>Наименование</th><th>Размеры, мм</th><th>Кол-во</th>
+               <th>Площадь, м²</th><th>Стоимость</th></tr></thead>
+    <tbody>
+      {% for s in calc.snapshot.quote.structures %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ s.construction_name }}</td>
+        <td>{{ s.width_mm }} × {{ s.height_mm }}</td>
+        <td>{{ s.quantity }}</td>
+        <td>{{ '%.2f' | format(s.area_total | float) }}</td>
+        <td><strong>{{ s.subtotal }} ₽</strong></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Детализация сумм</h3>
+  <table class="table">
+    <thead><tr><th>Позиция</th><th>Формула</th><th>Сумма</th></tr></thead>
+    <tbody>
+      {% for s in calc.snapshot.quote.structures %}
+        {% for line in s.breakdown %}
+        <tr><td>{{ line.name }}</td><td><small>{{ line.formula }}</small></td><td>{{ line.amount }} ₽</td></tr>
+        {% endfor %}
+      {% endfor %}
+      {% for line in calc.snapshot.quote.hardware.lines %}
+      <tr><td>Фурнитура: {{ line.name }}</td><td><small>{{ line.formula }}</small></td><td>{{ line.amount }} ₽</td></tr>
+      {% endfor %}
+      {% for line in calc.snapshot.quote.services.lines %}
+      <tr><td>Услуга: {{ line.name }}</td><td><small>{{ line.formula }}</small></td><td>{{ line.amount }} ₽</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="total-summary narrow">
+    <div class="sum-row"><span>До скидки</span><strong>{{ calc.snapshot.quote.subtotal }} ₽</strong></div>
+    <div class="sum-row"><span>Скидка</span><strong>{{ calc.snapshot.quote.discount }} ₽</strong></div>
+    <div class="sum-row total"><span>Итого</span><strong>{{ calc.snapshot.quote.total }} ₽</strong></div>
+  </div>
+
+  <h3>История версий</h3>
+  <table class="table">
+    <thead><tr><th>№ версии</th><th>Дата создания/пересчёта</th><th>Пользователь</th>
+               <th>Версия прайса</th><th>Было</th><th>Стало</th><th>Разница</th><th></th></tr></thead>
+    <tbody>
+      {% for v in versions %}
+      <tr>
+        <td>{{ v.version_no or 1 }}</td>
+        <td>{{ v.recalculated_at or v.created_at }}</td>
+        <td>{{ v.recalc_user or v.user_login }}</td>
+        <td>{{ v.price_version }}</td>
+        <td>{{ v.old_total or '—' }}</td>
+        <td>{{ v.new_total or v.total }}</td>
+        <td>{{ v.difference or '—' }}</td>
+        <td><a class="btn btn-ghost btn-small" href="{{ url_for('calculation_view', calc_id=v.id) }}">Открыть</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

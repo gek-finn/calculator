@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Дополнительные услуги{% endblock %}
+{% block topbar_left %}Дополнительные услуги{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="muted">Услуги включаются в расчёт независимо друг от друга.
+  Значения воспроизводят учебный пример со скриншота, а не утверждают реальный прайс компании.</p>
+  <table class="table">
+    <thead><tr><th>Название</th><th>Тип расчёта</th><th>Цена</th><th>Единица</th><th>Активна</th></tr></thead>
+    <tbody>
+      {% for item in price.services.values() %}
+      <tr>
+        <td>{{ item.название }}</td>
+        <td>{{ item.тип_расчёта }}</td>
+        <td>{{ item.цена }} ₽</td>
+        <td>{{ item.единица }}</td>
+        <td>{{ 'да' if item.активна else 'нет' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if is_admin %}
+  <p class="muted">Изменение цен — в разделе «Прайс».</p>
+  {% endif %}
+</section>
+{% endblock %}

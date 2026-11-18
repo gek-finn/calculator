@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% block title %}Настройки{% endblock %}
+{% block topbar_left %}Настройки{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>О приложении</h2>
+  <p>Локальный учебный калькулятор стоимости строительных конструкций.
+  Все данные хранятся на вашем компьютере.</p>
+  <p>Папка данных: <code>{{ data_dir }}</code></p>
+  <ul>
+    <li>Денежные расчёты выполняются через <code>Decimal</code> — без ошибок округления двоичной арифметики.</li>
+    <li>Каждый сохранённый расчёт хранит снимок цен и правил своей версии прайса.</li>
+    <li>Пароли хранятся только в виде необратимых хешей (Werkzeug).</li>
+  </ul>
+  <p class="muted">Приложение не предназначено для размещения в открытом интернете
+  без дополнительного усиления безопасности (HTTPS, ограничение доступа, резервное копирование).</p>
+  {% if session.get('role') == 'admin' %}
+  <a class="btn btn-ghost" href="{{ url_for('admin_price_create_sample') }}">Создать учебный Excel-файл (только если отсутствует)</a>
+  {% endif %}
+</section>
+
+{% if shutdown_available and session.get('role') == 'admin' %}
+<section class="card">
+  <h2>Завершение работы</h2>
+  <p class="muted">Останавливает локальный сервер калькулятора. После этого окно
+  браузера можно закрыть. Данные (база, прайс, расчёты) сохраняются.</p>
+  <form method="post" action="{{ url_for('app_shutdown') }}"
+        onsubmit="return confirm('Завершить работу калькулятора?');">
+    <button class="btn btn-ghost" type="submit">Завершить приложение</button>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

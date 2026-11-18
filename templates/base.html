@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Калькулятор «ЛидерПро»{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+{% if session.get('user_id') %}
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">ЛидерПро<span>калькулятор</span></div>
+    <nav>
+      <a href="{{ url_for('index') }}" class="{{ 'active' if request.path == '/' }}">Новый расчёт</a>
+      <a href="{{ url_for('calculations') }}" class="{{ 'active' if request.path.startswith('/calculations') }}">Мои расчёты</a>
+      <a href="{{ url_for('clients') }}" class="{{ 'active' if request.path == '/clients' }}">Клиенты</a>
+      <a href="{{ url_for('price_view') }}" class="{{ 'active' if request.path == '/price' }}">Прайс</a>
+      <a href="{{ url_for('services_view') }}" class="{{ 'active' if request.path == '/services' }}">Доп. услуги</a>
+      {% if session.get('role') == 'admin' %}
+      <a href="{{ url_for('admin') }}" class="{{ 'active' if request.path == '/admin' }}">Админ-панель</a>
+      <a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.path == '/admin/users' }}">Пользователи</a>
+      {% endif %}
+      <a href="{{ url_for('settings_view') }}" class="{{ 'active' if request.path == '/settings' }}">Настройки</a>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <strong>{{ session.get('full_name') or session.get('login') }}</strong><br>
+        <small>{{ 'Администратор' if session.get('role') == 'admin' else 'Менеджер' }}</small>
+      </div>
+      <a class="logout" href="{{ url_for('logout') }}">Выход</a>
+    </div>
+  </aside>
+  <div class="main-col">
+    <header class="topbar">
+      <div class="topbar-left">{% block topbar_left %}Калькулятор стоимости конструкций{% endblock %}</div>
+      <div class="topbar-right">{{ session.get('login') }}</div>
+    </header>
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash flash-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+{% else %}
+  {% block auth %}{% endblock %}
+{% endif %}
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

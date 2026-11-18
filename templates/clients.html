@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Клиенты{% endblock %}
+{% block topbar_left %}Клиенты{% endblock %}
+{% block content %}
+<section class="card">
+  <p class="muted">Клиенты формируются из сохранённых расчётов.</p>
+  <table class="table">
+    <thead><tr><th>Клиент</th><th>Телефон</th><th>Email</th><th>Адрес объекта</th>
+               <th>Расчётов</th><th>Последний расчёт</th></tr></thead>
+    <tbody>
+      {% for c in items %}
+      <tr>
+        <td>{{ c.client_name }}</td>
+        <td>{{ c.client_phone or '—' }}</td>
+        <td>{{ c.client_email or '—' }}</td>
+        <td>{{ c.client_address or '—' }}</td>
+        <td>{{ c.orders }}</td>
+        <td><a href="{{ url_for('calculations') }}?q={{ c.last_number }}">{{ c.last_number }}</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">Клиентов пока нет — сохраните первый расчёт.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

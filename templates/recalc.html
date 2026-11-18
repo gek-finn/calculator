@@ -1,0 +1,268 @@
+{% extends 'base.html' %}
+{% block title %}Пересчёт расчёта{% endblock %}
+{% block topbar_left %}Пересчёт расчёта{% endblock %}
+{% block content %}
+<section class="card">
+  <h2>Пересчитать расчёт по актуальному прайсу</h2>
+  <p class="muted">Исходный расчёт <strong>{{ calc.number }}</strong> от {{ calc.created_at }} (версия прайса: {{ calc.price_version }}).
+  Новый результат будет сохранён как <strong>новая версия</strong> этой цепочки расчётов. Исходный расчёт останется без изменений.</p>
+
+  <div class="grid2">
+    <label>Источник прайса для пересчёта
+      <select id="price-source">
+        <option value="current">Использовать последнюю успешно загруженную версию прайса</option>
+        <option value="excel">Проверить текущий Excel-файл (загрузка и проверка структуры и данных)</option>
+      </select>
+    </label>
+    <label>Тип скидки (оставить пустым — сохранить исходный)
+      <select id="discount-type">
+        <option value="">Без изменения</option>
+        <option value="процент">Процент</option>
+        <option value="фикс">Фиксированная сумма, ₽</option>
+      </select>
+    </label>
+    <label>Значение скидки
+      <input type="number" id="discount-value" min="0" step="0.01" disabled>
+    </label>
+  </div>
+
+  <div id="recalc-status" class="muted"></div>
+
+  <div id="warnings-box" hidden class="flash flash-info"></div>
+  <div id="errors-box" hidden class="flash flash-error"></div>
+
+  <section id="changes-section" hidden class="card">
+    <h3>Что изменилось в прайсе для этого расчёта</h3>
+    <ul id="changes-list"></ul>
+    <p class="muted">Показаны изменения только тех позиций прайса, которые участвуют
+    в этом расчёте. Если значение в списке изменилось, но итог нет — значит это
+    значение не влияет на стоимость данного расчёта (например, минимальная стоимость
+    ниже расчётной суммы).</p>
+  </section>
+
+  <section id="missing-section" hidden class="card">
+    <h3>Позиции, не найденные в новом прайсе</h3>
+    <p class="muted">Отсутствующая позиция никогда не заменяется нулём. Для обязательной позиции
+    нужно выбрать замену (и нажать кнопку проверки ещё раз) либо отменить пересчёт.</p>
+    <div id="missing-list"></div>
+  </section>
+
+  <section id="comparison-section" hidden class="card">
+    <h3>Сравнение стоимости</h3>
+    <table class="table">
+      <thead><tr><th>Показатель</th><th>Исходный расчёт</th><th>Новый расчёт</th><th>Разница</th></tr></thead>
+      <tbody id="comparison-body"></tbody>
+    </table>
+    <p id="comparison-note" class="flash flash-info" hidden></p>
+    <p class="muted">Показываются только применимые строки. Все составляющие фиксируются в новой версии расчёта.</p>
+  </section>
+
+  <label id="ack-wrap" hidden>
+    <input type="checkbox" id="ack-warnings">
+    Я ознакомлен(а) с предупреждениями об изменениях в прайсе и подтверждаю пересчёт
+  </label>
+
+  <div class="form-actions">
+    <button class="btn btn-primary" type="button" id="btn-preview">Проверить и показать предварительный пересчёт</button>
+    <button class="btn btn-primary" type="button" id="btn-confirm" disabled>Подтвердить пересчёт (создать новую версию)</button>
+    <a class="btn btn-ghost" href="{{ url_for('calculation_view', calc_id=calc.id) }}">Вернуться к исходному расчёту</a>
+  </div>
+  <div id="result-box"></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const calcId = {{ calc_id }};
+  const state = { replacements: {}, lastPayload: null, hasWarnings: false };
+  const priceSrc = document.getElementById('price-source');
+  const discountType = document.getElementById('discount-type');
+  const discountValue = document.getElementById('discount-value');
+  const status = document.getElementById('recalc-status');
+  const warningsBox = document.getElementById('warnings-box');
+  const errorsBox = document.getElementById('errors-box');
+  const changesSection = document.getElementById('changes-section');
+  const changesList = document.getElementById('changes-list');
+  const missingSection = document.getElementById('missing-section');
+  const missingList = document.getElementById('missing-list');
+  const comparisonSection = document.getElementById('comparison-section');
+  const comparisonBody = document.getElementById('comparison-body');
+  const comparisonNote = document.getElementById('comparison-note');
+  const ackWrap = document.getElementById('ack-wrap');
+  const ackBox = document.getElementById('ack-warnings');
+  const btnPreview = document.getElementById('btn-preview');
+  const btnConfirm = document.getElementById('btn-confirm');
+  const resultBox = document.getElementById('result-box');
+
+  discountType.addEventListener('change', () => {
+    discountValue.disabled = discountType.value === '';
+  });
+
+  function fmt(n){
+    const num = Number(n||0);
+    if(!isFinite(num)) return String(n||'0,00');
+    return num.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ₽';
+  }
+  function fmtDiff(n){
+    const num = Number(n||0);
+    const sign = num>0?'+': (num<0?'-':'');
+    return sign + Math.abs(num).toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' ₽';
+  }
+  function fmtValue(v){
+    if(v === null || v === undefined || v === '') return '—';
+    const s = String(v).trim();
+    const num = Number(s.replace(',', '.'));
+    if(s !== '' && isFinite(num)) return num.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
+    return esc(s);
+  }
+  function esc(s){
+    return String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  }
+  function updateConfirmState(){
+    btnConfirm.disabled = !(state.lastPayload && (!state.hasWarnings || ackBox.checked));
+  }
+  ackBox.addEventListener('change', updateConfirmState);
+
+  async function preview(){
+    status.textContent = 'Проверяю прайс и выполняю предварительный пересчёт…';
+    warningsBox.hidden = true; errorsBox.hidden = true; missingSection.hidden = true;
+    changesSection.hidden = true; comparisonSection.hidden = true; comparisonNote.hidden = true;
+    ackWrap.hidden = true; ackBox.checked = false;
+    btnConfirm.disabled = true; state.lastPayload = null; state.hasWarnings = false;
+    const payload = {
+      price_source: priceSrc.value,
+      discount_type: discountType.value || null,
+      discount_value: discountValue.value || null,
+      replacements: state.replacements
+    };
+    const res = await fetch(`/calculations/${calcId}/recalc/preview`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!data.ok){
+      errorsBox.hidden = false;
+      errorsBox.innerHTML = '<strong>Пересчёт отменён (старый расчёт не изменён):</strong><ul>' +
+        (data.errors||[]).map(e=>`<li>${esc(e.message)}</li>`).join('')+'</ul>';
+      status.textContent = '';
+      return;
+    }
+    // предупреждения: требуют явного подтверждения
+    state.hasWarnings = !!(data.warnings && data.warnings.length);
+    if(state.hasWarnings){
+      warningsBox.hidden = false;
+      warningsBox.innerHTML = '<strong>Предупреждения (требуют подтверждения):</strong><ul>' +
+        data.warnings.map(w=>`<li>${esc(w)}</li>`).join('')+'</ul>';
+      ackWrap.hidden = false;
+    }
+    // отсутствующие позиции (необязательные)
+    if(data.missing && data.missing.length){
+      missingSection.hidden = false;
+      missingList.innerHTML = '';
+      data.missing.forEach(m=>{
+        const wrap = document.createElement('div');
+        wrap.className = 'missing-item';
+        const requiredNote = m.required ? '' : ' — не влияет на стоимость';
+        wrap.innerHTML = `<p><strong>${esc(m.name)}</strong> — ${esc(m.reason)}${requiredNote}.</p>`;
+        if(m.candidates && m.candidates.length){
+          const label = document.createElement('label');
+          const sel = document.createElement('select');
+          const opt0 = document.createElement('option');
+          opt0.value=''; opt0.textContent='— выбрать замену —';
+          sel.appendChild(opt0);
+          m.candidates.forEach(c=>{
+            const o=document.createElement('option');
+            o.value=c.id; o.textContent=c.name;
+            sel.appendChild(o);
+          });
+          const key = m.kind + '::' + m.id;
+          sel.value = state.replacements[key] || '';
+          sel.addEventListener('change', ()=>{
+            if(sel.value) state.replacements[key] = sel.value;
+            else delete state.replacements[key];
+          });
+          label.append('Замена: ', sel);
+          wrap.appendChild(label);
+        }
+        missingList.appendChild(wrap);
+      });
+    }
+    // изменения прайса по позициям, участвующим в расчёте
+    if(data.price_changes && data.price_changes.length){
+      changesSection.hidden = false;
+      changesList.innerHTML = '';
+      data.price_changes.forEach(c=>{
+        const li = document.createElement('li');
+        li.innerHTML = `<strong>${esc(c.name)}</strong> — ${esc(c.field_label)}: `
+          + `${fmtValue(c.old)} → ${fmtValue(c.new)}`;
+        changesList.appendChild(li);
+      });
+    } else {
+      changesSection.hidden = true;
+    }
+    // сравнение
+    if(data.comparison && data.comparison.length){
+      comparisonSection.hidden = false;
+      comparisonBody.innerHTML = '';
+      data.comparison.forEach(r=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${esc(r.label)}</td><td>${fmt(r.old)}</td><td>${fmt(r.new)}</td><td>${fmtDiff(r.diff)}</td>`;
+        comparisonBody.appendChild(tr);
+      });
+      // Если ни одна сумма не изменилась — прямо сообщаем об этом,
+      // чтобы результат не выглядел как «пересчёт не сработал».
+      const noChanges = data.comparison.every(r => Number(r.diff) === 0);
+      const priceDiffers = !!(data.price_changes && data.price_changes.length);
+      comparisonNote.hidden = !noChanges;
+      if(noChanges){
+        comparisonNote.textContent = priceDiffers
+          ? 'Значения прайса изменились, но на итог этого расчёта они не влияют — суммы совпадают '
+            + '(см. список изменений прайса выше). Новую версию создать можно, но её итог совпадёт с исходным.'
+          : 'Прайс не изменился с момента расчёта: пересчёт даёт те же суммы '
+            + '(разница по всем строкам 0 ₽). Новую версию создать можно, но её итог совпадёт с исходным.';
+      }
+      const totalRow = data.comparison.find(r => r.label === 'Итог');
+      const totalsMsg = totalRow
+        ? `Итог: ${fmt(totalRow.old)} → ${fmt(totalRow.new)}.`
+        : '';
+      status.textContent = `Предварительный пересчёт выполнен. ${totalsMsg} Проверьте сравнение и подтвердите действие.`;
+    } else {
+      status.textContent = 'Предварительный пересчёт выполнен. Проверьте сравнение и подтвердите действие.';
+    }
+    state.lastPayload = payload;
+    updateConfirmState();
+    comparisonSection.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }
+
+  async function confirm(){
+    const payload = Object.assign({}, state.lastPayload, {
+      confirm: true,
+      ack_warnings: ackBox.checked
+    });
+    resultBox.innerHTML = '<p class="muted">Сохраняю новую версию расчёта…</p>';
+    btnConfirm.disabled = true;
+    const res = await fetch(`/calculations/${calcId}/recalc/confirm`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if(!data.ok){
+      resultBox.innerHTML = '<div class="flash flash-error"><strong>Не удалось сохранить:</strong><ul>' +
+        (data.errors||[]).map(e=>`<li>${esc(e.message)}</li>`).join('')+'</ul></div>' +
+        '<p class="muted">Исходный расчёт не изменён. Нажмите «Проверить…» после исправления.</p>';
+      btnConfirm.disabled = false;
+      return;
+    }
+    resultBox.innerHTML = `<div class="flash flash-success">Создана новая версия расчёта <strong>v${data.version_no}</strong> ` +
+      `(цепочка расчётов № ${esc(data.number)}). Исходный расчёт сохранён без изменений.</div>` +
+      `<div class="form-actions">` +
+      `<a class="btn btn-primary" href="/calculations/${data.calc_id}">Открыть новый расчёт</a>` +
+      `<a class="btn btn-ghost" href="/calculations/${calcId}/versions">Сравнить версии</a>` +
+      `<a class="btn btn-ghost" href="/calculations/${calcId}">Вернуться к исходному расчёту</a></div>`;
+    status.textContent = '';
+  }
+
+  btnPreview.addEventListener('click', preview);
+  btnConfirm.addEventListener('click', confirm);
+})();
+</script>
+{% endblock %}
