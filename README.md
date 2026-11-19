@@ -27,16 +27,17 @@ Python · Flask · SQLite · JavaScript · openpyxl · PyInstaller
 
 ## Интерфейс
 
-![Интерфейс приложения на демонстрационных данных](docs/screenshots/desktop.png)
+### Создание расчёта
 
-<details>
-<summary>Мобильный экран и другие разделы</summary>
+![Создание расчёта](docs/screenshots/desktop.png)
 
-![detail-1](docs/screenshots/detail-1.png)
+### Работа с прайсом
 
-![mobile](docs/screenshots/mobile.png)
+![Работа с прайсом](docs/screenshots/detail-1.png)
 
-</details>
+### Мобильный экран
+
+![Мобильный экран](docs/screenshots/mobile.png)
 
 ## Запуск
 
